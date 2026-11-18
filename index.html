@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>D'Peñas Cevichería - Sistema POS</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Firebase SDK (Compatibilidad Realtime Database) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d0614;
+            --card-bg: #1c0b30;
+            --card-hover: #271042;
+            --primary: #00d2ff;
+            --accent: #ff007f;
+            --yellow: #ffb703;
+            --green: #00e676;
+            --red: #ff3d57;
+            --text-main: #ffffff;
+            --text-sub: #d0c8e8;
+            --border-color: #3c196e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); padding-bottom: 40px; }
+
+        /* HEADER & NAVEGACIÓN DE ROLES */
+        header {
+            background: linear-gradient(135deg, #1c0b30, #090210);
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--primary);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto 10px auto;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-logo {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: var(--primary); color: #000;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 900; font-size: 16px;
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+        }
+        .brand h1 { font-size: 17px; color: #fff; line-height: 1.1; }
+        .brand span { font-size: 11px; color: var(--yellow); }
+
+        .status-group { display: flex; align-items: center; gap: 8px; }
+        .conn-badge {
+            font-size: 11px; padding: 4px 10px; border-radius: 20px;
+            background: rgba(255,255,255,0.08); border: 1px solid #4a2380;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); }
+        .dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .dot.offline { background: var(--red); }
+
+        .sound-btn {
+            background: var(--card-bg); border: 1px solid var(--primary);
+            color: var(--primary); padding: 5px 10px; border-radius: 20px;
+            font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 5px;
+        }
+        .sound-btn.active { background: var(--primary); color: #000; font-weight: bold; }
+
+        .role-tabs {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 8px; max-width: 1200px; margin: 0 auto;
+        }
+        .role-btn {
+            background: #120621; border: 1px solid #4a2380; color: var(--text-sub);
+            padding: 10px 8px; border-radius: 10px; font-size: 13px; font-weight: bold;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+            transition: 0.2s; position: relative;
+        }
+        .role-btn.active {
+            background: linear-gradient(135deg, #00d2ff, #0072ff);
+            color: #fff; border-color: var(--primary);
+            box-shadow: 0 0 12px rgba(0, 210, 255, 0.35);
+        }
+        .badge-count {
+            background: var(--accent); color: #fff; font-size: 11px;
+            padding: 1px 6px; border-radius: 10px; font-weight: 800;
+        }
+
+        .main-container { max-width: 1200px; margin: 0 auto; padding: 15px; }
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+
+        /* MAPA DE 10 MESAS (MOZO) */
+        .legend {
+            display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+            font-size: 12px; color: var(--text-sub);
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+        .tables-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+            gap: 12px;
+        }
+        .table-card {
+            background: var(--card-bg); border: 2px solid var(--border-color);
+            border-radius: 14px; padding: 14px; cursor: pointer;
+            transition: 0.2s; position: relative; display: flex;
+            flex-direction: column; justify-content: space-between; min-height: 125px;
+        }
+        .table-card:hover { transform: translateY(-2px); background: var(--card-hover); }
+        .table-card.status-cocina { border-color: var(--yellow); box-shadow: 0 0 12px rgba(255, 183, 3, 0.2); }
+        .table-card.status-listo { border-color: var(--green); box-shadow: 0 0 16px rgba(0, 230, 118, 0.35); animation: pulseGreen 1.8s infinite; }
+        .table-card.status-servido { border-color: var(--accent); }
+
+        @keyframes pulseGreen {
+            0%, 100% { box-shadow: 0 0 8px rgba(0, 230, 118, 0.25); }
+            50% { box-shadow: 0 0 20px rgba(0, 230, 118, 0.65); }
+        }
+
+        .table-header { display: flex; justify-content: space-between; align-items: center; }
+        .table-num { font-size: 18px; font-weight: 800; color: #fff; }
+        .table-status-pill {
+            font-size: 10px; font-weight: bold; padding: 3px 8px;
+            border-radius: 12px; text-transform: uppercase;
+        }
+        .pill-libre { background: rgba(255,255,255,0.1); color: var(--text-sub); }
+        .pill-cocina { background: var(--yellow); color: #000; }
+        .pill-listo { background: var(--green); color: #000; }
+        .pill-servido { background: var(--accent); color: #fff; }
+
+        .table-client { font-size: 12px; color: var(--primary); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .table-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 12px; }
+        .table-items-txt { font-size: 11px; color: var(--text-sub); }
+        .table-total { font-size: 16px; font-weight: 800; color: var(--yellow); }
+
+        /* VISTA COCINA (KDS) */
+        .kds-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            gap: 15px;
+        }
+        .kds-card {
+            background: var(--card-bg); border: 2px solid var(--yellow);
+            border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;
+        }
+        .kds-card-header {
+            background: rgba(255, 183, 3, 0.15); padding: 12px 14px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #3c196e;
+        }
+        .kds-mesa { font-size: 18px; font-weight: 900; color: var(--yellow); }
+        .kds-time { font-size: 12px; color: var(--text-sub); }
+        .kds-items { padding: 12px 14px; flex: 1; }
+        .kds-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 0; border-bottom: 1px dashed #3c196e; gap: 8px;
+        }
+        .kds-item:last-child { border-bottom: none; }
+        .kds-item-info { flex: 1; }
+        .kds-qty {
+            background: var(--primary); color: #000; font-weight: 900;
+            padding: 2px 7px; border-radius: 6px; font-size: 13px; margin-right: 6px;
+        }
+        .kds-name { font-size: 14px; font-weight: 600; }
+        .kds-note {
+            display: inline-block; margin-top: 4px; font-size: 12px;
+            background: rgba(255, 0, 127, 0.2); color: #ff7eb9;
+            border: 1px solid var(--accent); padding: 2px 8px; border-radius: 6px;
+        }
+        .kds-check-btn {
+            background: #271042; border: 1px solid var(--green); color: var(--green);
+            padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer;
+        }
+        .kds-card-footer { padding: 10px 14px; background: #130622; }
+        .btn-all-ready {
+            width: 100%; background: var(--green); color: #000; border: none;
+            padding: 10px; border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer;
+        }
+
+        /* VISTA CAJA */
+        .caja-summary {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px; margin-bottom: 18px;
+        }
+        .stat-box {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 12px;
+        }
+        .stat-label { font-size: 11px; color: var(--text-sub); text-transform: uppercase; }
+        .stat-val { font-size: 20px; font-weight: 800; color: var(--primary); margin-top: 4px; }
+        .stat-val.gold { color: var(--yellow); }
+
+        .caja-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;
+        }
+        .caja-card {
+            background: var(--card-bg); border: 1px solid var(--accent);
+            border-radius: 14px; padding: 14px;
+        }
+        .caja-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .caja-list { font-size: 13px; color: var(--text-sub); margin-bottom: 12px; max-height: 150px; overflow-y: auto; }
+        .caja-list-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .caja-actions { display: flex; gap: 8px; }
+        .btn-cobrar {
+            flex: 1; background: linear-gradient(135deg, #00e676, #00b248);
+            color: #000; border: none; padding: 10px; border-radius: 8px;
+            font-weight: 800; cursor: pointer; font-size: 13px;
+        }
+        .btn-ticket {
+            background: #2b1349; color: #fff; border: 1px solid var(--primary);
+            padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px;
+        }
+
+        /* MODAL TOMAR PEDIDO / COBRAR */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.88); z-index: 200;
+            justify-content: center; align-items: flex-end;
+        }
+        @media (min-width: 768px) {
+            .modal { align-items: center; }
+        }
+        .modal-panel {
+            background: var(--bg-color); border: 2px solid var(--primary);
+            width: 100%; max-width: 750px; height: 92vh;
+            border-radius: 18px 18px 0 0; display: flex; flex-direction: column; overflow: hidden;
+        }
+        @media (min-width: 768px) {
+            .modal-panel { height: 85vh; border-radius: 18px; }
+        }
+        .modal-header {
+            background: var(--card-bg); padding: 14px 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .close-btn {
+            background: var(--accent); border: none; color: #fff;
+            width: 32px; height: 32px; border-radius: 50%; font-size: 16px; cursor: pointer;
+        }
+        .modal-body { flex: 1; overflow-y: auto; padding: 14px; }
+
+        .client-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        .input-dark {
+            flex: 1; background: var(--card-bg); border: 1px solid #4a2380;
+            color: #fff; padding: 9px 12px; border-radius: 10px; font-size: 14px; outline: none;
+        }
+        .input-dark:focus { border-color: var(--primary); }
+
+        .existing-orders-box {
+            background: #140724; border: 1px solid #3c196e; border-radius: 12px;
+            padding: 10px 12px; margin-bottom: 14px;
+        }
+        .existing-title { font-size: 12px; font-weight: bold; color: var(--yellow); margin-bottom: 8px; display: flex; justify-content: space-between; }
+        .existing-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; gap: 6px;
+        }
+        .tag-status { font-size: 10px; padding: 2px 6px; border-radius: 6px; font-weight: bold; }
+        .tag-cocina { background: rgba(255,183,3,0.2); color: var(--yellow); }
+        .tag-listo { background: rgba(0,230,118,0.2); color: var(--green); }
+        .tag-servido { background: rgba(255,255,255,0.1); color: var(--text-sub); }
+
+        .btn-mini {
+            border: none; padding: 4px 8px; border-radius: 6px; font-size: 11px;
+            font-weight: bold; cursor: pointer;
+        }
+
+        .cat-scroll {
+            display: flex; overflow-x: auto; gap: 6px; padding-bottom: 8px; margin-bottom: 10px;
+        }
+        .cat-scroll::-webkit-scrollbar { display: none; }
+        .cat-pill {
+            background: var(--card-bg); border: 1px solid #4a2380; color: #fff;
+            padding: 6px 12px; border-radius: 16px; font-size: 12px; white-space: nowrap; cursor: pointer;
+        }
+        .cat-pill.active { background: var(--primary); color: #000; font-weight: bold; }
+
+        .menu-grid-modal { display: grid; grid-template-columns: 1fr; gap: 8px; }
+        @media (min-width: 600px) { .menu-grid-modal { grid-template-columns: 1fr 1fr; } }
+
+        .dish-item {
+            background: var(--card-bg); border: 1px solid #3c196e; border-radius: 10px;
+            padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .dish-name { font-size: 13px; font-weight: 600; }
+        .dish-price { font-size: 14px; font-weight: 800; color: var(--primary); margin-top: 2px; }
+        .btn-add-dish {
+            background: linear-gradient(135deg, #00d2ff, #0072ff); color: #fff;
+            border: none; width: 32px; height: 32px; border-radius: 50%;
+            font-size: 15px; cursor: pointer; flex-shrink: 0;
+        }
+
+        /* CARRITO DE NUEVA RONDA */
+        .draft-box {
+            background: #130524; border-top: 2px solid var(--primary);
+            padding: 10px 14px; max-height: 230px; overflow-y: auto;
+        }
+        .draft-item {
+            display: flex; flex-direction: column; gap: 4px;
+            padding: 6px 0; border-bottom: 1px dashed #3c196e;
+        }
+        .draft-top { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+        .qty-controls { display: flex; align-items: center; gap: 8px; }
+        .qty-btn {
+            background: #2d134d; color: #fff; border: 1px solid var(--primary);
+            width: 24px; height: 24px; border-radius: 6px; font-weight: bold; cursor: pointer;
+        }
+        .quick-notes { display: flex; gap: 4px; flex-wrap: wrap; }
+        .qnote {
+            background: rgba(255,255,255,0.07); border: 1px solid #4a2380;
+            color: var(--text-sub); font-size: 10px; padding: 2px 7px; border-radius: 10px; cursor: pointer;
+        }
+        .qnote.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+        .modal-footer {
+            background: #07020d; padding: 12px 16px;
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        }
+        .btn-send-kitchen {
+            background: linear-gradient(135deg, #ffb703, #fb8500); color: #000;
+            border: none; padding: 11px 18px; border-radius: 25px;
+            font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+        }
+
+        /* MODAL COBRO & IMPRESIÓN */
+        .pay-methods { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0; }
+        .pay-opt {
+            background: var(--card-bg); border: 2px solid #4a2380; color: #fff;
+            padding: 10px; border-radius: 10px; text-align: center; font-weight: bold; cursor: pointer;
+        }
+        .pay-opt.active { border-color: var(--green); background: rgba(0, 230, 118, 0.15); color: var(--green); }
+
+        .empty-state {
+            text-align: center; padding: 40px 20px; color: var(--text-sub);
+            background: var(--card-bg); border-radius: 14px; border: 1px dashed #4a2380;
+        }
+
+        /* ESTILOS DE IMPRESIÓN DE TICKET */
+        #print-area { display: none; }
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area {
+                display: block; position: absolute; left: 0; top: 0; width: 100%;
+                background: #fff; color: #000; font-family: monospace; padding: 10px; font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-top">
+        <div class="brand">
+            <div class="brand-logo">D'P</div>
+            <div>
+                <h1>D'Peñas Cevichería</h1>
+                <span>Sistema POS • 10 Mesas • Talara</span>
+            </div>
+        </div>
+        <div class="status-group">
+            <button class="sound-btn" id="soundToggle" onclick="toggleSound()">
+                <i class="fas fa-volume-mute"></i> <span>Activar Sonido</span>
+            </button>
+            <div class="conn-badge">
+                <div class="dot" id="connDot"></div>
+                <span id="connText">Conectando...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="role-tabs">
+        <button class="role-btn active" onclick="switchRole('mozo', this)">
+            <i class="fas fa-utensils"></i> Mozo <span class="badge-count" id="badge-listo" style="display:none; background:#00e676; color:#000;">0</span>
+        </button>
+        <button class="role-btn" onclick="switchRole('cocina', this)">
+            <i class="fas fa-fire-burner"></i> Cocina <span class="badge-count" id="badge-cocina" style="display:none;">0</span>
+        </button>
+        <button class="role-btn" onclick="switchRole('caja', this)">
+            <i class="fas fa-cash-register"></i> Caja <span class="badge-count" id="badge-caja" style="display:none; background:#ffb703; color:#000;">0</span>
+        </button>
+    </div>
+</header>
+
+<div class="main-container">
+    <!-- ==================== VISTA 1: MOZO ==================== -->
+    <section id="view-mozo" class="view-section active">
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#3c196e;"></div> Libre</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ffb703;"></div> En Cocina</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#00e676;"></div> ¡Listo para servir!</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ff007f;"></div> Servido / Por Cobrar</div>
+        </div>
+        <div class="tables-grid" id="tablesGrid"></div>
+    </section>
+
+    <!-- ==================== VISTA 2: COCINA ==================== -->
+    <section id="view-cocina" class="view-section">
+        <div id="kdsContainer" class="kds-grid"></div>
+    </section>
+
+    <!-- ==================== VISTA 3: CAJA ==================== -->
+    <section id="view-caja" class="view-section">
+        <div class="caja-summary">
+            <div class="stat-box">
+                <div class="stat-label">Por Cobrar en Salón</div>
+                <div class="stat-val gold" id="stat-pendiente">S/ 0.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Cobrado Hoy</div>
+                <div class="stat-val" id="stat-cobrado">S/ 0.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Efectivo / Yape-Plin</div>
+                <div class="stat-val" style="font-size:15px;" id="stat-desglose">S/ 0.00 / S/ 0.00</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Mesas Cerradas Hoy</div>
+                <div class="stat-val" id="stat-tickets">0</div>
+            </div>
+        </div>
+
+        <h3 style="margin-bottom:12px; color:var(--primary); font-size:15px;"><i class="fas fa-receipt"></i> Mesas Activas para Cobro</h3>
+        <div id="cajaMesasContainer" class="caja-grid" style="margin-bottom:24px;"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h3 style="color:var(--text-sub); font-size:14px;"><i class="fas fa-history"></i> Últimos Cobros del Día</h3>
+            <button onclick="resetVentasHoy()" style="background:transparent; border:1px solid #4a2380; color:var(--text-sub); padding:4px 10px; border-radius:8px; font-size:11px; cursor:pointer;">Reiniciar Historial Hoy</button>
+        </div>
+        <div id="historialVentas" style="background:var(--card-bg); border-radius:12px; padding:12px; font-size:13px;"></div>
+    </section>
+</div>
+
+<!-- ==================== MODAL PEDIDO DE MESA (MOZO) ==================== -->
+<div class="modal" id="mesaModal">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <div>
+                <h2 id="modalMesaTitle" style="font-size:18px; color:var(--primary);">Mesa 1</h2>
+                <span style="font-size:11px; color:var(--text-sub);">Agrega platos y envíalos directo a cocina</span>
+            </div>
+            <button class="close-btn" onclick="closeMesaModal()"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="modal-body">
+            <div class="client-input-row">
+                <input type="text" id="clienteInput" class="input-dark" placeholder="Nombre cliente o nota de mesa (opcional)" onchange="saveClientName()">
+            </div>
+
+            <!-- Platos ya enviados anteriormente a esta mesa -->
+            <div class="existing-orders-box" id="existingOrdersBox" style="display:none;">
+                <div class="existing-title">
+                    <span><i class="fas fa-clipboard-list"></i> PEDIDOS YA ENVIADOS EN ESTA MESA</span>
+                    <span id="existingTotalLabel">S/ 0.00</span>
+                </div>
+                <div id="existingOrdersList"></div>
+            </div>
+
+            <!-- Buscador y categorías -->
+            <input type="text" id="searchMenu" class="input-dark" style="width:100%; margin-bottom:10px;" placeholder="🔍 Buscar ceviche, parihuela, cerveza, chicharrón..." oninput="renderModalMenu()">
+
+            <div class="cat-scroll" id="modalCats">
+                <button class="cat-pill active" onclick="selectModalCat('todos', this)">Todos</button>
+                <button class="cat-pill" onclick="selectModalCat('ceviches', this)">Ceviches</button>
+                <button class="cat-pill" onclick="selectModalCat('sudados', this)">Sudados & Parihuelas</button>
+                <button class="cat-pill" onclick="selectModalCat('entradas', this)">Entradas & Causas</button>
+                <button class="cat-pill" onclick="selectModalCat('pescados', this)">Pescados Fritos</button>
+                <button class="cat-pill" onclick="selectModalCat('mariscos', this)">Esp. Marinas</button>
+                <button class="cat-pill" onclick="selectModalCat('rondas', this)">Rondas & Arroces</button>
+                <button class="cat-pill" onclick="selectModalCat('criollos', this)">Criollos</button>
+                <button class="cat-pill" onclick="selectModalCat('piqueos', this)">Piqueos</button>
+                <button class="cat-pill" onclick="selectModalCat('domingos', this)">Domingos</button>
+                <button class="cat-pill" onclick="selectModalCat('noches', this)">Noches</button>
+                <button class="cat-pill" onclick="selectModalCat('guarniciones', this)">Guarniciones</button>
+                <button class="cat-pill" onclick="selectModalCat('bebidas', this)">Bebidas</button>
+            </div>
+
+            <div class="menu-grid-modal" id="modalMenuList"></div>
+        </div>
+
+        <!-- Nueva ronda seleccionada -->
+        <div class="draft-box" id="draftBox" style="display:none;">
+            <div style="font-size:11px; font-weight:bold; color:var(--primary); margin-bottom:6px;">NUEVA ORDEN POR ENVIAR:</div>
+            <div id="draftList"></div>
+        </div>
+
+        <div class="modal-footer">
+            <div>
+                <div style="font-size:11px; color:var(--text-sub);">Nueva ronda:</div>
+                <div style="font-size:18px; font-weight:900; color:var(--yellow);" id="draftTotal">S/ 0.00</div>
+            </div>
+            <button class="btn-send-kitchen" onclick="enviarPedidoCocina()">
+                <i class="fas fa-paper-plane"></i> Enviar a Cocina
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL COBRO DE CAJA ==================== -->
+<div class="modal" id="cobroModal">
+    <div class="modal-panel" style="height:auto; max-height:90vh;">
+        <div class="modal-header">
+            <h2 id="cobroMesaTitle" style="font-size:18px; color:var(--green);">Cobrar Mesa</h2>
+            <button class="close-btn" onclick="closeCobroModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="cobroDetalle" style="background:#140724; padding:12px; border-radius:10px; margin-bottom:12px; font-size:13px;"></div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--card-bg); border-radius:10px; margin-bottom:12px;">
+                <span style="font-weight:bold;">TOTAL A COBRAR:</span>
+                <span style="font-size:22px; font-weight:900; color:var(--yellow);" id="cobroTotalText">S/ 0.00</span>
+            </div>
+
+            <label style="font-size:12px; color:var(--text-sub);">Método de Pago:</label>
+            <div class="pay-methods">
+                <div class="pay-opt active" onclick="selectPayMethod('Efectivo', this)">💵 Efectivo</div>
+                <div class="pay-opt" onclick="selectPayMethod('Yape', this)">📱 Yape</div>
+                <div class="pay-opt" onclick="selectPayMethod('Plin', this)">📲 Plin</div>
+                <div class="pay-opt" onclick="selectPayMethod('Visa / POS', this)">💳 Visa / POS</div>
+            </div>
+
+            <div id="efectivoCalc" style="margin-top:10px;">
+                <label style="font-size:12px; color:var(--text-sub);">Paga con (S/): opcional para calcular vuelto</label>
+                <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
+                    <input type="number" id="pagaConInput" class="input-dark" placeholder="Ej. 100" oninput="calcVuelto()">
+                    <div style="font-size:14px; font-weight:bold; color:var(--green);">Vuelto: <span id="vueltoText">S/ 0.00</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ticket" onclick="imprimirTicketActual()"><i class="fas fa-print"></i> Pre-cuenta</button>
+            <button class="btn-cobrar" style="flex:0 1 auto; padding:12px 22px;" onclick="confirmarCobro()">
+                <i class="fas fa-check-circle"></i> Confirmar Cobro y Liberar Mesa
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ÁREA OCULTA PARA IMPRESIÓN DE TICKET -->
+<div id="print-area"></div>
+
+<script>
+// =========================================================
+// 1. CONFIGURACIÓN DE FIREBASE (D'PEÑAS CEVICHERÍA)
+// =========================================================
+const firebaseConfig = {
+    apiKey: "AIzaSyAForP7YP6Me9ErkVJ9cSdqPCsotH-oAYE",
+    authDomain: "dpenas-pos.firebaseapp.com",
+    databaseURL: "https://dpenas-pos-default-rtdb.firebaseio.com",
+    projectId: "dpenas-pos",
+    storageBucket: "dpenas-pos.firebasestorage.app"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// =========================================================
+// 2. CARTA COMPLETA DE D'PEÑAS CEVICHERÍA
+// =========================================================
+const menuData = [
+    // CEVICHES
+    { cat: 'ceviches', name: 'Ceviche de Aguja (Personal)', price: 35 },
+    { cat: 'ceviches', name: 'Ceviche de Aguja (Mediano)', price: 50 },
+    { cat: 'ceviches', name: 'Ceviche de Aguja (Grande)', price: 65 },
+    { cat: 'ceviches', name: 'Ceviche de Cabrilla (Personal)', price: 35 },
+    { cat: 'ceviches', name: 'Ceviche de Cabrilla (Mediano)', price: 50 },
+    { cat: 'ceviches', name: 'Ceviche de Cabrilla (Grande)', price: 65 },
+    { cat: 'ceviches', name: 'Ceviche de Cabrillón (Personal)', price: 55 },
+    { cat: 'ceviches', name: 'Ceviche de Cabrillón (Mediano)', price: 70 },
+    { cat: 'ceviches', name: 'Ceviche de Cabrillón (Grande)', price: 85 },
+    { cat: 'ceviches', name: 'Ceviche de Mero (Personal)', price: 55 },
+    { cat: 'ceviches', name: 'Ceviche de Mero (Mediano)', price: 70 },
+    { cat: 'ceviches', name: 'Ceviche de Mero (Grande)', price: 85 },
+    { cat: 'ceviches', name: 'Ceviche de Caballa', price: 25 },
+    { cat: 'ceviches', name: 'Ceviche de Conchas Negras', price: 35 },
+    { cat: 'ceviches', name: 'Ceviche de Conchas Blancas', price: 25 },
+    { cat: 'ceviches', name: 'Ceviche Mixto (Pescado + Conchas Negras)', price: 55 },
+    { cat: 'ceviches', name: 'Ceviche Mixto (Pescado + Mariscos)', price: 55 },
+
+    // SUDADOS Y PARIHUELAS
+    { cat: 'sudados', name: 'Sudado de Cabrilla (Opción 1)', price: 40 },
+    { cat: 'sudados', name: 'Sudado de Cabrilla (Opción 2)', price: 60 },
+    { cat: 'sudados', name: 'Sudado de Cabrilla (Opción 3)', price: 80 },
+    { cat: 'sudados', name: 'Sudado de Cabrillón (Opción 1)', price: 55 },
+    { cat: 'sudados', name: 'Sudado de Cabrillón (Opción 2)', price: 85 },
+    { cat: 'sudados', name: 'Sudado de Mero (Opción 1)', price: 55 },
+    { cat: 'sudados', name: 'Sudado de Mero (Opción 2)', price: 85 },
+    { cat: 'sudados', name: 'Parihuela Cabrillón + Mariscos (Opción 1)', price: 60 },
+    { cat: 'sudados', name: 'Parihuela Cabrillón + Mariscos (Opción 2)', price: 80 },
+    { cat: 'sudados', name: 'Parihuela Cabrilla + Mariscos y Langosta (Opción 1)', price: 80 },
+    { cat: 'sudados', name: 'Parihuela Cabrilla + Mariscos y Langosta (Opción 2)', price: 100 },
+    { cat: 'sudados', name: 'Parihuela Mero + Mariscos + Langosta', price: 140 },
+
+    // ENTRADAS Y CAUSAS
+    { cat: 'entradas', name: 'Tiradito de Ají Amarillo', price: 28 },
+    { cat: 'entradas', name: 'Tiradito de Rocoto', price: 28 },
+    { cat: 'entradas', name: 'Pulpo al Olivo', price: 35 },
+    { cat: 'entradas', name: 'Causa de Pollo', price: 25 },
+    { cat: 'entradas', name: 'Causa de Pulpo al Olivo', price: 32 },
+    { cat: 'entradas', name: 'Causa de Langostinos', price: 32 },
+    { cat: 'entradas', name: 'Leche de Tigre', price: 18 },
+    { cat: 'entradas', name: 'Leche de Pantera', price: 25 },
+
+    // PESCADOS FRITOS
+    { cat: 'pescados', name: 'Pescado Frito Cabrilla (Personal)', price: 40 },
+    { cat: 'pescados', name: 'Pescado Frito Cabrilla (Grande)', price: 60 },
+    { cat: 'pescados', name: 'Pescado Frito Cabrillón (Personal)', price: 60 },
+    { cat: 'pescados', name: 'Pescado Frito Cabrillón (Grande)', price: 85 },
+    { cat: 'pescados', name: 'Pescado Frito Mero (Personal)', price: 60 },
+    { cat: 'pescados', name: 'Pescado Frito Mero (Grande)', price: 85 },
+    { cat: 'pescados', name: 'Jalea Mixta', price: 60 },
+    { cat: 'pescados', name: 'Chicharrón de Pescado (Personal)', price: 35 },
+    { cat: 'pescados', name: 'Chicharrón de Pescado (Grande)', price: 60 },
+    { cat: 'pescados', name: 'Chicharrón Mixto (Pescado + Mariscos)', price: 55 },
+    { cat: 'pescados', name: 'Cabrilla en Escama de Ajo', price: 50 },
+
+    // ESPECIALIDADES MARINAS
+    { cat: 'mariscos', name: 'Cachema Encebollada', price: 35 },
+    { cat: 'mariscos', name: 'Pescado al Vapor Cabrilla', price: 50 },
+    { cat: 'mariscos', name: 'Pasado por Agua Caliente Cabrilla', price: 50 },
+    { cat: 'mariscos', name: 'Pasado por Agua Caliente Caballa', price: 25 },
+    { cat: 'mariscos', name: 'Parrilla Marina (Pescado + Mariscos + Langosta)', price: 120 },
+    { cat: 'mariscos', name: 'Langosta en Mantequilla de Ajo', price: 80 },
+    { cat: 'mariscos', name: 'Langosta en Salsa de Mariscos', price: 100 },
+    { cat: 'mariscos', name: 'Langosta a la Parrilla', price: 80 },
+    { cat: 'mariscos', name: 'Pulpo a la Parrilla', price: 45 },
+
+    // RONDAS Y ARROCES
+    { cat: 'rondas', name: 'Ronda Criolla', price: 80 },
+    { cat: 'rondas', name: 'Ronda Marina', price: 80 },
+    { cat: 'rondas', name: 'Langostinos Jumbo al Ajillo', price: 55 },
+    { cat: 'rondas', name: 'Arroz con Mariscos', price: 45 },
+    { cat: 'rondas', name: 'Chaufa de Mariscos', price: 45 },
+    { cat: 'rondas', name: 'Arroz con Conchas Negras', price: 45 },
+    { cat: 'rondas', name: 'Tacu Tacu en Salsa de Mariscos', price: 45 },
+    { cat: 'rondas', name: 'Tacu Tacu con Lomo Saltado', price: 38 },
+    { cat: 'rondas', name: 'Filete de Pescado en Salsa de Champiñones', price: 35 },
+    { cat: 'rondas', name: 'Filete de Pescado en Salsa de Mariscos', price: 40 },
+    { cat: 'rondas', name: 'Filete de Mero en Salsa de Mariscos', price: 65 },
+    { cat: 'rondas', name: 'Canastas en Salsa de Mariscos', price: 40 },
+    { cat: 'rondas', name: 'Espaguetis en Salsa de Mariscos', price: 35 },
+
+    // PLATOS CRIOLLOS
+    { cat: 'criollos', name: 'Lomo Saltado (Arroz y Papas Fritas)', price: 35 },
+    { cat: 'criollos', name: 'Lomo Apanado con Puré', price: 35 },
+    { cat: 'criollos', name: 'Saltado de Pollo', price: 28 },
+    { cat: 'criollos', name: 'Saltado de Carne', price: 28 },
+    { cat: 'criollos', name: 'Tallarines Verdes con Chuleta (Carne/Cerdo) + Ensalada', price: 25 },
+    { cat: 'criollos', name: 'Tallarines Verdes con Lomo Saltado', price: 38 },
+    { cat: 'criollos', name: 'Tallarines Verdes con Milanesa de Pollo', price: 20 },
+    { cat: 'criollos', name: 'Tallarines Verdes con Carne Apanada', price: 25 },
+
+    // PIQUEOS REGIONALES
+    { cat: 'piqueos', name: 'Seco de Chabelo', price: 25 },
+    { cat: 'piqueos', name: 'Seco de Chabelo con Costillas de Chancho', price: 45 },
+    { cat: 'piqueos', name: 'Chabelo + Majadito + Costillas de Chancho', price: 65 },
+    { cat: 'piqueos', name: 'Carne Seca', price: 42 },
+    { cat: 'piqueos', name: 'Pescado Cabrilla a la Parrilla', price: 60 },
+
+    // ESPECIALES DOMINGO
+    { cat: 'domingos', name: 'Arroz con Pato', price: 25 },
+    { cat: 'domingos', name: 'Cabrito con Tamal', price: 22 },
+    { cat: 'domingos', name: 'Cabrito sin Tamal', price: 20 },
+    { cat: 'domingos', name: 'Tamalitos (unidad)', price: 3 },
+
+    // ESPECIALES NOCHE
+    { cat: 'noches', name: 'Pollo al Barril (1/4)', price: 16 },
+    { cat: 'noches', name: 'Pollo al Barril (1/2)', price: 30 },
+    { cat: 'noches', name: 'Pollo al Barril (1 entero)', price: 60 },
+    { cat: 'noches', name: 'Chancho con Pollo', price: 25 },
+    { cat: 'noches', name: 'Chancho', price: 35 },
+    { cat: 'noches', name: 'Alitas a la BBQ', price: 20 },
+    { cat: 'noches', name: 'Alitas Acevichadas', price: 20 },
+    { cat: 'noches', name: 'Mostrito', price: 16 },
+    { cat: 'noches', name: 'Parrilla Chancho - Lomo', price: 90 },
+    { cat: 'noches', name: 'Pechuga de Pollo - Lomo Fino', price: 155 },
+
+    // GUARNICIONES
+    { cat: 'guarniciones', name: '1 Porción de Arroz', price: 5 },
+    { cat: 'guarniciones', name: 'Patacones', price: 10 },
+    { cat: 'guarniciones', name: 'Camote o Yuca', price: 5 },
+    { cat: 'guarniciones', name: 'Chifles', price: 5 },
+    { cat: 'guarniciones', name: 'Papas Fritas', price: 10 },
+    { cat: 'guarniciones', name: 'Ensalada Fresca', price: 5 },
+
+    // BEBIDAS Y BEBIDAS ALCOHÓLICAS
+    { cat: 'bebidas', name: 'Limonada Frozen (Jarra)', price: 15 },
+    { cat: 'bebidas', name: 'Maracuyá (Jarra)', price: 15 },
+    { cat: 'bebidas', name: 'Chicha Morada (Jarra)', price: 15 },
+    { cat: 'bebidas', name: 'Clarito (Jarra)', price: 15 },
+    { cat: 'bebidas', name: 'Cerveza Cristal', price: 9 },
+    { cat: 'bebidas', name: 'Cerveza Pilsen', price: 9 },
+    { cat: 'bebidas', name: 'Cerveza Cusqueña Trigo', price: 10 },
+    { cat: 'bebidas', name: 'Cerveza Cusqueña Negra', price: 10 },
+    { cat: 'bebidas', name: 'Cerveza Heineken', price: 10 },
+    { cat: 'bebidas', name: 'Cerveza Corona', price: 10 },
+    { cat: 'bebidas', name: 'Cerveza Stella', price: 10 },
+    { cat: 'bebidas', name: 'Tragos (Piña Colada, Mojito, Machu Picchu, Pisco Sour)', price: 20 }
+];
+
+// =========================================================
+// 3. ESTADO GLOBAL Y SINCRONIZACIÓN EN TIEMPO REAL
+// =========================================================
+const TOTAL_MESAS = 10;
+let mesasData = {};
+let ventasData = {};
+let currentRole = 'mozo';
+let selectedMesa = null;
+let selectedModalCat = 'todos';
+let draftCart = []; // { name, price, qty, note }
+let cobroMesaId = null;
+let selectedPayMethod = 'Efectivo';
+let soundEnabled = false;
+let prevCocinaCount = null;
+let prevListoCount = null;
+
+const todayKey = new Date().toISOString().slice(0, 10);
+
+// Estado de conexión Firebase
+db.ref('.info/connected').on('value', (snap) => {
+    const dot = document.getElementById('connDot');
+    const txt = document.getElementById('connText');
+    if (snap.val() === true) {
+        dot.className = 'dot online';
+        txt.innerText = 'En vivo';
+    } else {
+        dot.className = 'dot offline';
+        txt.innerText = 'Sin red';
+    }
+});
+
+// Escuchar cambios en las 10 mesas en tiempo real
+db.ref('mesas').on('value', (snapshot) => {
+    mesasData = snapshot.val() || {};
+    checkAudioAlerts();
+    renderAllViews();
+    if (selectedMesa !== null) {
+        renderExistingOrders();
+    }
+});
+
+// Escuchar ventas del día en tiempo real
+db.ref('ventas/' + todayKey).on('value', (snapshot) => {
+    ventasData = snapshot.val() || {};
+    renderCaja();
+});
+
+// =========================================================
+// 4. SONIDO DE NOTIFICACIÓN (COCINA Y MOZO)
+// =========================================================
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    const btn = document.getElementById('soundToggle');
+    if (soundEnabled) {
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-volume-up"></i> <span>Sonido ON</span>';
+        playBeep(660, 0.15);
+    } else {
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fas fa-volume-mute"></i> <span>Activar Sonido</span>';
+    }
+}
+
+function playBeep(freq = 580, duration = 0.25) {
+    if (!soundEnabled) return;
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
+}
+
+function checkAudioAlerts() {
+    let cocinaItems = 0;
+    let listoItems = 0;
+    for (let i = 1; i <= TOTAL_MESAS; i++) {
+        const items = getMesaItems(i);
+        items.forEach(it => {
+            if (it.status === 'cocina') cocinaItems++;
+            if (it.status === 'listo') listoItems++;
+        });
+    }
+    if (prevCocinaCount !== null && cocinaItems > prevCocinaCount) {
+        playBeep(520, 0.3);
+        setTimeout(() => playBeep(780, 0.3), 180);
+    }
+    if (prevListoCount !== null && listoItems > prevListoCount) {
+        playBeep(880, 0.35);
+    }
+    prevCocinaCount = cocinaItems;
+    prevListoCount = listoItems;
+}
+
+// =========================================================
+// 5. UTILIDADES DE DATOS DE MESA
+// =========================================================
+function getMesaItems(mesaNum) {
+    const m = mesasData['mesa_' + mesaNum];
+    if (!m || !m.items) return [];
+    return Object.entries(m.items).map(([key, val]) => ({ id: key, ...val }));
+}
+
+function getMesaTotal(mesaNum) {
+    return getMesaItems(mesaNum).reduce((acc, it) => acc + (it.price * it.qty), 0);
+}
+
+function switchRole(role, btn) {
+    currentRole = role;
+    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('view-' + role).classList.add('active');
+}
+
+function renderAllViews() {
+    renderMozoGrid();
+    renderCocina();
+    renderCaja();
+}
+
+// =========================================================
+// 6. VISTA MOZO (MAPA DE 10 MESAS Y MODAL DE PEDIDO)
+// =========================================================
+function renderMozoGrid() {
+    const grid = document.getElementById('tablesGrid');
+    let html = '';
+    let totalListos = 0;
+
+    for (let i = 1; i <= TOTAL_MESAS; i++) {
+        const m = mesasData['mesa_' + i] || {};
+        const items = getMesaItems(i);
+        const total = getMesaTotal(i);
+
+        let statusClass = '';
+        let pillClass = 'pill-libre';
+        let pillText = 'Libre';
+
+        if (items.length > 0) {
+            const hasListo = items.some(it => it.status === 'listo');
+            const hasCocina = items.some(it => it.status === 'cocina');
+            totalListos += items.filter(it => it.status === 'listo').length;
+
+            if (hasListo) {
+                statusClass = 'status-listo';
+                pillClass = 'pill-listo';
+                pillText = '¡Listo Servir!';
+            } else if (hasCocina) {
+                statusClass = 'status-cocina';
+                pillClass = 'pill-cocina';
+                pillText = 'En Cocina';
+            } else {
+                statusClass = 'status-servido';
+                pillClass = 'pill-servido';
+                pillText = 'Servido';
+            }
+        }
+
+        html += `
+            <div class="table-card ${statusClass}" onclick="openMesaModal(${i})">
+                <div>
+                    <div class="table-header">
+                        <span class="table-num">Mesa ${i}</span>
+                        <span class="table-status-pill ${pillClass}">${pillText}</span>
+                    </div>
+                    <div class="table-client">${m.cliente ? '<i class="fas fa-user"></i> ' + m.cliente : ''}</div>
+                </div>
+                <div class="table-footer">
+                    <span class="table-items-txt">${items.length > 0 ? items.reduce((a, b) => a + b.qty, 0) + ' platos' : 'Tocar para pedir'}</span>
+                    <span class="table-total">${total > 0 ? 'S/ ' + total.toFixed(2) : ''}</span>
+                </div>
+            </div>
+        `;
+    }
+    grid.innerHTML = html;
+
+    const badge = document.getElementById('badge-listo');
+    if (totalListos > 0) {
+        badge.style.display = 'inline-block';
+        badge.innerText = totalListos;
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function openMesaModal(mesaNum) {
+    selectedMesa = mesaNum;
+    draftCart = [];
+    document.getElementById('modalMesaTitle').innerText = `Mesa ${mesaNum}`;
+    const m = mesasData['mesa_' + mesaNum] || {};
+    document.getElementById('clienteInput').value = m.cliente || '';
+    document.getElementById('searchMenu').value = '';
+    renderExistingOrders();
+    renderDraft();
+    renderModalMenu();
+    document.getElementById('mesaModal').style.display = 'flex';
+}
+
+function closeMesaModal() {
+    document.getElementById('mesaModal').style.display = 'none';
+    selectedMesa = null;
+}
+
+function saveClientName() {
+    if (!selectedMesa) return;
+    const val = document.getElementById('clienteInput').value.trim();
+    db.ref(`mesas/mesa_${selectedMesa}/cliente`).set(val);
+}
+
+function renderExistingOrders() {
+    const items = getMesaItems(selectedMesa);
+    const box = document.getElementById('existingOrdersBox');
+    const list = document.getElementById('existingOrdersList');
+
+    if (items.length === 0) {
+        box.style.display = 'none';
+        return;
+    }
+    box.style.display = 'block';
+    document.getElementById('existingTotalLabel').innerText = `Acumulado: S/ ${getMesaTotal(selectedMesa).toFixed(2)}`;
+
+    list.innerHTML = items.map(it => {
+        let tag = '';
+        let actionBtn = '';
+        if (it.status === 'cocina') {
+            tag = `<span class="tag-status tag-cocina">En cocina</span>`;
+        } else if (it.status === 'listo') {
+            tag = `<span class="tag-status tag-listo">¡Listo!</span>`;
+            actionBtn = `<button class="btn-mini" style="background:var(--green); color:#000;" onclick="marcarServido('${it.id}')">Servido</button>`;
+        } else {
+            tag = `<span class="tag-status tag-servido">Servido</span>`;
+        }
+
+        return `
+            <div class="existing-row">
+                <div style="flex:1;">
+                    <strong>${it.qty}x</strong> ${it.name}
+                    ${it.note ? `<div style="font-size:11px; color:#ff7eb9;">Nota: ${it.note}</div>` : ''}
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    ${tag}
+                    ${actionBtn}
+                    <button class="btn-mini" style="background:rgba(255,61,87,0.2); color:#ff3d57;" title="Anular plato" onclick="eliminarItemExistente('${it.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function marcarServido(itemId) {
+    db.ref(`mesas/mesa_${selectedMesa}/items/${itemId}/status`).set('servido');
+}
+
+function eliminarItemExistente(itemId) {
+    if (confirm('¿Eliminar este plato de la mesa?')) {
+        db.ref(`mesas/mesa_${selectedMesa}/items/${itemId}`).remove();
+    }
+}
+
+function selectModalCat(cat, btn) {
+    selectedModalCat = cat;
+    document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    renderModalMenu();
+}
+
+function renderModalMenu() {
+    const query = document.getElementById('searchMenu').value.toLowerCase().trim();
+    const filtered = menuData.filter(item => {
+        const matchCat = selectedModalCat === 'todos' || item.cat === selectedModalCat;
+        const matchTxt = item.name.toLowerCase().includes(query);
+        return matchCat && matchTxt;
+    });
+
+    document.getElementById('modalMenuList').innerHTML = filtered.map(item => `
+        <div class="dish-item">
+            <div>
+                <div class="dish-name">${item.name}</div>
+                <div class="dish-price">S/ ${item.price.toFixed(2)}</div>
+            </div>
+            <button class="btn-add-dish" onclick="addToDraft('${item.name.replace(/'/g, "\\'")}', ${item.price})">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function addToDraft(name, price) {
+    const existing = draftCart.find(d => d.name === name && d.note === '');
+    if (existing) {
+        existing.qty += 1;
+    } else {
+        draftCart.push({ name, price, qty: 1, note: '' });
+    }
+    renderDraft();
+}
+
+function changeDraftQty(idx, delta) {
+    draftCart[idx].qty += delta;
+    if (draftCart[idx].qty <= 0) draftCart.splice(idx, 1);
+    renderDraft();
+}
+
+function toggleQuickNote(idx, noteText) {
+    const current = draftCart[idx].note;
+    if (current.includes(noteText)) {
+        draftCart[idx].note = current.replace(noteText, '').replace(/\s+,|,\s+/g, ', ').replace(/^,\s*|,\s*$/g, '').trim();
+    } else {
+        draftCart[idx].note = current ? `${current}, ${noteText}` : noteText;
+    }
+    renderDraft();
+}
+
+function updateCustomNote(idx, val) {
+    draftCart[idx].note = val;
+}
+
+function renderDraft() {
+    const box = document.getElementById('draftBox');
+    const list = document.getElementById('draftList');
+    const totalEl = document.getElementById('draftTotal');
+
+    if (draftCart.length === 0) {
+        box.style.display = 'none';
+        totalEl.innerText = 'S/ 0.00';
+        return;
+    }
+    box.style.display = 'block';
+
+    let total = 0;
+    const notesOptions = ['Sin ají', 'Poco picante', 'Sin hielo', 'Bien frito', 'Para llevar'];
+
+    list.innerHTML = draftCart.map((item, idx) => {
+        total += item.price * item.qty;
+        return `
+            <div class="draft-item">
+                <div class="draft-top">
+                    <span style="font-weight:bold;">${item.name} <small style="color:var(--primary);">(S/ ${(item.price * item.qty).toFixed(2)})</small></span>
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="changeDraftQty(${idx}, -1)">-</button>
+                        <strong>${item.qty}</strong>
+                        <button class="qty-btn" onclick="changeDraftQty(${idx}, 1)">+</button>
+                    </div>
+                </div>
+                <div class="quick-notes">
+                    ${notesOptions.map(n => `
+                        <span class="qnote ${item.note.includes(n) ? 'selected' : ''}" onclick="toggleQuickNote(${idx}, '${n}')">${n}</span>
+                    `).join('')}
+                    <input type="text" placeholder="+ Nota..." value="${item.note}" oninput="updateCustomNote(${idx}, this.value)"
+                        style="background:#0d0614; border:1px solid #4a2380; color:#fff; font-size:11px; padding:2px 6px; border-radius:8px; width:100px;">
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    totalEl.innerText = `S/ ${total.toFixed(2)}`;
+}
+
+function enviarPedidoCocina() {
+    if (draftCart.length === 0) {
+        alert('Selecciona al menos un plato para enviar a cocina.');
+        return;
+    }
+    const itemsRef = db.ref(`mesas/mesa_${selectedMesa}/items`);
+    const now = Date.now();
+
+    draftCart.forEach(item => {
+        itemsRef.push({
+            name: item.name,
+            price: item.price,
+            qty: item.qty,
+            note: item.note || '',
+            status: 'cocina',
+            timestamp: now
+        });
+    });
+
+    db.ref(`mesas/mesa_${selectedMesa}/updatedAt`).set(now);
+    draftCart = [];
+    closeMesaModal();
+}
+
+// =========================================================
+// 7. VISTA COCINA (KDS EN TIEMPO REAL)
+// =========================================================
+function renderCocina() {
+    const container = document.getElementById('kdsContainer');
+    let cardsHtml = '';
+    let pendingOrdersCount = 0;
+
+    // Recopilar mesas con platos en preparación ('cocina')
+    const activeTables = [];
+    for (let i = 1; i <= TOTAL_MESAS; i++) {
+        const items = getMesaItems(i).filter(it => it.status === 'cocina');
+        if (items.length > 0) {
+            const oldestTs = Math.min(...items.map(it => it.timestamp || Date.now()));
+            activeTables.push({ mesa: i, cliente: (mesasData['mesa_' + i] || {}).cliente || '', items, oldestTs });
+            pendingOrdersCount += items.length;
+        }
+    }
+
+    // Ordenar por llegada (los más antiguos primero)
+    activeTables.sort((a, b) => a.oldestTs - b.oldestTs);
+
+    const badge = document.getElementById('badge-cocina');
+    if (pendingOrdersCount > 0) {
+        badge.style.display = 'inline-block';
+        badge.innerText = pendingOrdersCount;
+    } else {
+        badge.style.display = 'none';
+    }
+
+    if (activeTables.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <i class="fas fa-check-circle" style="font-size:36px; color:var(--green); margin-bottom:10px;"></i>
+                <h3>Cocina al día</h3>
+                <p style="font-size:13px; margin-top:4px;">No hay comandas pendientes en este momento.</p>
+            </div>
+        `;
+        return;
+    }
+
+    activeTables.forEach(t => {
+        const mins = Math.max(0, Math.floor((Date.now() - t.oldestTs) / 60000));
+        cardsHtml += `
+            <div class="kds-card">
+                <div class="kds-card-header">
+                    <div>
+                        <div class="kds-mesa">MESA ${t.mesa}</div>
+                        ${t.cliente ? `<div style="font-size:12px; color:#fff;">${t.cliente}</div>` : ''}
+                    </div>
+                    <div class="kds-time"><i class="far fa-clock"></i> Hace ${mins} min</div>
+                </div>
+                <div class="kds-items">
+                    ${t.items.map(it => `
+                        <div class="kds-item">
+                            <div class="kds-item-info">
+                                <div><span class="kds-qty">${it.qty}x</span> <span class="kds-name">${it.name}</span></div>
+                                ${it.note ? `<span class="kds-note"><i class="fas fa-exclamation-triangle"></i> ${it.note}</span>` : ''}
+                            </div>
+                            <button class="kds-check-btn" onclick="marcarPlatoListo(${t.mesa}, '${it.id}')">Listo</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="kds-card-footer">
+                    <button class="btn-all-ready" onclick="marcarMesaLista(${t.mesa})">
+                        <i class="fas fa-bell"></i> ¡Todo Listo (Avisar Mozo)!
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = cardsHtml;
+}
+
+function marcarPlatoListo(mesaNum, itemId) {
+    db.ref(`mesas/mesa_${mesaNum}/items/${itemId}/status`).set('listo');
+}
+
+function marcarMesaLista(mesaNum) {
+    const items = getMesaItems(mesaNum).filter(it => it.status === 'cocina');
+    items.forEach(it => {
+        db.ref(`mesas/mesa_${mesaNum}/items/${it.id}/status`).set('listo');
+    });
+}
+
+// =========================================================
+// 8. VISTA CAJA (COBROS, TICKET Y RESUMEN DEL DÍA)
+// =========================================================
+function renderCaja() {
+    const container = document.getElementById('cajaMesasContainer');
+    let html = '';
+    let totalPendiente = 0;
+    let mesasActivasCount = 0;
+
+    for (let i = 1; i <= TOTAL_MESAS; i++) {
+        const items = getMesaItems(i);
+        if (items.length === 0) continue;
+
+        mesasActivasCount++;
+        const total = getMesaTotal(i);
+        totalPendiente += total;
+        const m = mesasData['mesa_' + i] || {};
+
+        html += `
+            <div class="caja-card">
+                <div class="caja-card-top">
+                    <div>
+                        <strong style="font-size:17px; color:#fff;">Mesa ${i}</strong>
+                        ${m.cliente ? `<span style="font-size:12px; color:var(--primary); display:block;">${m.cliente}</span>` : ''}
+                    </div>
+                    <span style="font-size:18px; font-weight:900; color:var(--yellow);">S/ ${total.toFixed(2)}</span>
+                </div>
+                <div class="caja-list">
+                    ${items.map(it => `
+                        <div class="caja-list-row">
+                            <span>${it.qty}x ${it.name}</span>
+                            <span>S/ ${(it.price * it.qty).toFixed(2)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="caja-actions">
+                    <button class="btn-ticket" onclick="imprimirMesaDirecto(${i})" title="Imprimir Pre-cuenta"><i class="fas fa-print"></i></button>
+                    <button class="btn-cobrar" onclick="openCobroModal(${i})"><i class="fas fa-hand-holding-usd"></i> Cobrar Mesa</button>
+                </div>
+            </div>
+        `;
+    }
+
+    const badgeCaja = document.getElementById('badge-caja');
+    if (mesasActivasCount > 0) {
+        badgeCaja.style.display = 'inline-block';
+        badgeCaja.innerText = mesasActivasCount;
+    } else {
+        badgeCaja.style.display = 'none';
+    }
+
+    container.innerHTML = html || `<div class="empty-state" style="grid-column:1/-1;">No hay mesas ocupadas en este momento.</div>`;
+
+    // Calcular resumen del día
+    const ventasArr = Object.values(ventasData);
+    let totalHoy = 0;
+    let totalEfectivo = 0;
+    let totalDigital = 0;
+
+    ventasArr.forEach(v => {
+        totalHoy += v.total || 0;
+        if (v.metodo === 'Efectivo') totalEfectivo += v.total || 0;
+        else totalDigital += v.total || 0;
+    });
+
+    document.getElementById('stat-pendiente').innerText = `S/ ${totalPendiente.toFixed(2)}`;
+    document.getElementById('stat-cobrado').innerText = `S/ ${totalHoy.toFixed(2)}`;
+    document.getElementById('stat-desglose').innerText = `S/ ${totalEfectivo.toFixed(2)} / S/ ${totalDigital.toFixed(2)}`;
+    document.getElementById('stat-tickets').innerText = ventasArr.length;
+
+    const histEl = document.getElementById('historialVentas');
+    if (ventasArr.length === 0) {
+        histEl.innerHTML = `<span style="color:var(--text-sub);">Aún no se han cerrado cuentas hoy.</span>`;
+    } else {
+        histEl.innerHTML = ventasArr.slice().reverse().map(v => `
+            <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+                <span><strong>Mesa ${v.mesa}</strong> (${v.hora}) • <span style="color:var(--primary);">${v.metodo}</span></span>
+                <strong style="color:var(--green);">S/ ${v.total.toFixed(2)}</strong>
+            </div>
+        `).join('');
+    }
+}
+
+function openCobroModal(mesaNum) {
+    cobroMesaId = mesaNum;
+    const items = getMesaItems(mesaNum);
+    const total = getMesaTotal(mesaNum);
+
+    document.getElementById('cobroMesaTitle').innerText = `Cobrar Mesa ${mesaNum}`;
+    document.getElementById('cobroTotalText').innerText = `S/ ${total.toFixed(2)}`;
+    document.getElementById('pagaConInput').value = '';
+    document.getElementById('vueltoText').innerText = 'S/ 0.00';
+
+    document.getElementById('cobroDetalle').innerHTML = items.map(it => `
+        <div style="display:flex; justify-content:space-between; padding:4px 0;">
+            <span>${it.qty}x ${it.name}</span>
+            <strong>S/ ${(it.price * it.qty).toFixed(2)}</strong>
+        </div>
+    `).join('');
+
+    document.getElementById('cobroModal').style.display = 'flex';
+}
+
+function closeCobroModal() {
+    document.getElementById('cobroModal').style.display = 'none';
+    cobroMesaId = null;
+}
+
+function selectPayMethod(method, el) {
+    selectedPayMethod = method;
+    document.querySelectorAll('.pay-opt').forEach(o => o.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('efectivoCalc').style.display = (method === 'Efectivo') ? 'block' : 'none';
+}
+
+function calcVuelto() {
+    if (!cobroMesaId) return;
+    const total = getMesaTotal(cobroMesaId);
+    const paga = parseFloat(document.getElementById('pagaConInput').value) || 0;
+    const vuelto = Math.max(0, paga - total);
+    document.getElementById('vueltoText').innerText = `S/ ${vuelto.toFixed(2)}`;
+}
+
+function confirmarCobro() {
+    if (!cobroMesaId) return;
+    const items = getMesaItems(cobroMesaId);
+    const total = getMesaTotal(cobroMesaId);
+    const hora = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+
+    db.ref('ventas/' + todayKey).push({
+        mesa: cobroMesaId,
+        total: total,
+        metodo: selectedPayMethod,
+        hora: hora,
+        items: items
+    });
+
+    // Liberar mesa en tiempo real para todos los dispositivos
+    db.ref('mesas/mesa_' + cobroMesaId).remove();
+    closeCobroModal();
+}
+
+function resetVentasHoy() {
+    if (confirm('¿Seguro que deseas borrar el historial de ventas cobradas de hoy?')) {
+        db.ref('ventas/' + todayKey).remove();
+    }
+}
+
+// =========================================================
+// 9. IMPRESIÓN DE PRE-CUENTA / TICKET
+// =========================================================
+function imprimirTicketActual() {
+    if (cobroMesaId) imprimirMesaDirecto(cobroMesaId);
+}
+
+function imprimirMesaDirecto(mesaNum) {
+    const items = getMesaItems(mesaNum);
+    const total = getMesaTotal(mesaNum);
+    const m = mesasData['mesa_' + mesaNum] || {};
+    const fecha = new Date().toLocaleString('es-PE');
+
+    document.getElementById('print-area').innerHTML = `
+        <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:8px; margin-bottom:8px;">
+            <strong style="font-size:15px;">D'PEÑAS CEVICHERÍA</strong><br>
+            Maruja Cabrero A - 12, Talara<br>
+            Tel: 954 025 848<br>
+            ${fecha}<br>
+            <strong>PRE-CUENTA • MESA ${mesaNum}</strong>
+            ${m.cliente ? `<br>Cliente: ${m.cliente}` : ''}
+        </div>
+        <div style="border-bottom:1px dashed #000; padding-bottom:8px; margin-bottom:8px;">
+            ${items.map(it => `
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>${it.qty}x ${it.name}</span>
+                    <span>S/ ${(it.price * it.qty).toFixed(2)}</span>
+                </div>
+            `).join('')}
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:14px; font-weight:bold;">
+            <span>TOTAL A PAGAR:</span>
+            <span>S/ ${total.toFixed(2)}</span>
+        </div>
+        <div style="text-align:center; margin-top:12px; font-size:11px;">
+            ¡Gracias por su preferencia!
+        </div>
+    `;
+    window.print();
+}
+
+// Refrescar minutos transcurridos en cocina cada 30 segundos
+setInterval(() => {
+    if (currentRole === 'cocina') renderCocina();
+}, 30000);
+</script>
+</body>
+</html>
